@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Rhythm Tiles</title>
+<style>
+  body { font-family: sans-serif; }
+  .tile-container {
+    display: flex;
+    gap: 5px;
+    border: 1px solid #ccc;
+    padding: 10px;
+    margin-bottom: 10px;
+    width: 90vw;
+    overflow-x: auto;
+  }
+  .tile {
+    cursor: grab;
+    padding: 10px;
+    text-align: center;
+    border: 1px solid #aaa;
+    box-shadow: 2px 2px 5px #888888;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    box-sizing: border-box;
+    height: 80px;
+    transition: width 0.3s ease-in-out; /* Smooth transition for width changes */
+  }
+  .tile img {
+    max-width: 100%;
+    max-height: 100%;
+    margin-bottom: 5px;
+  }
+  .dot-container {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 8px;
+    height: 8px;
+  }
+  .dot {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 1px solid #555;
+    background-color: transparent;
+    cursor: pointer;
+  }
+  .dot.filled {
+    background-color: #555;
+  }
+  .placeholder {
+    width: 0px;
+    height: 0px;
+    border: 0px dashed #bbb;
+    background-color: #eee;
+    box-sizing: border-box;
+  }
+  #assembly-area {
+    display: flex;
+    gap: 5px;
+    border: 2px dashed #bbb;
+    padding: 10px;
+    min-height: 100px;
+    margin-bottom: 10px;
+    width: 90vw;
+    overflow-x: auto;
+  }
+  #output { font-weight: bold; }
+</style>
+</head>
+<body>
+
+  <h1>Rhythm Tiles</h1>
+
+  <div id="tile-container" class="tile-container">
+    </div>
+
+  <h2>Assembly Area</h2>
+  <div id="assembly-area">
+    </div>
+
+  <p>Current Length: <span id="output">0/1</span></p>
+
+  <script>
+    const tilewidth = 800
+    const tileContainer = document.getElementById('tile-container');
+    const assemblyArea = document.getElementById('assembly-area');
+    const output = document.getElementById('output');
+
+    const noteValues = [
+      { name: 'Whole', value: 1, color: 'lightblue', image: 'whole_note.png' },
+      { name: 'Half', value: 0.5, color: 'lightgreen', image: 'half_note.png' },
+      { name: 'Quarter', value: 0.25, color: 'lightcoral', image: 'quarter_note.png' },
+      { name: 'Eighth', value: 0.125, color: 'lightsalmon', image: 'eighth_note.png' },
+      { name: 'Sixteenth', value: 0.0625, color: 'lightgoldenrodyellow', image: 'sixteenth_note.png' }
+    ];
+
+    let assembledLength = 0;
+    const assembledTiles = [];
+    let initialPlaceholder = createPlaceholder();
+
+    function createTile(note) {
+      const tile = document.createElement('div');
+      tile.classList.add('tile');
+      tile.style.backgroundColor = note.color;
+      tile.dataset.value = note.value;
+      tile.dataset.name = note.name;
+      tile.draggable = true;
+      const relativeWidth = note.value * tilewidth;
+      tile.style.width = `${relativeWidth}px`;
+
+      const img = document.createElement('img');
+      img.src = note.image;
+      img.style.maxWidth = '80%';
+      img.style.maxHeight = '50%';
+      img.style.marginBottom = '5px';
+      tile.appendChild(img);
+
+if (note.name !== 'Whole' && note.name !== 'Sixteenth') {
+  const wrapper = document.createElement('div');
+  wrapper.style.display = 'flex';
+  wrapper.style.alignItems = 'center';
+  wrapper.style.justifyContent = 'center';
+  wrapper.style.marginTop = '8px'; // adjust as needed
+
+  const dottedCheckbox = document.createElement('input');
+  dottedCheckbox.type = 'checkbox';
+  dottedCheckbox.style.width = '16px';
+  dottedCheckbox.style.height = '16px';
+  dottedCheckbox.style.borderRadius = '50%'; // makes it a circle
+  dottedCheckbox.style.appearance = 'none'; // remove default checkbox styling
+  dottedCheckbox.style.border = '2px solid black';
+  dottedCheckbox.style.backgroundColor = 'white';
+  dottedCheckbox.style.cursor = 'pointer';
+
+  dottedCheckbox.addEventListener('change', () => {
+    tile.dataset.dotted = dottedCheckbox.checked;
+    updateTileWidth(tile);
+    updateOutput();
+  });
+
+  // Optional: add a checkmark or fill when checked
+  dottedCheckbox.addEventListener('input', () => {
+    dottedCheckbox.style.backgroundColor = dottedCheckbox.checked ? 'black' : 'white';
+  });
+
+  wrapper.appendChild(dottedCheckbox);
+  tile.appendChild(wrapper);
+}
+
+
+      tile.addEventListener('dragstart', (event) => {
+        event.dataTransfer.setData('text/plain', note.value);
+        event.dataTransfer.setData('color', note.color);
+        event.dataTransfer.setData('name', note.name);
+        event.dataTransfer.setData('source', 'tile-container');
+        if (tile.parentNode === assemblyArea) {
+          event.dataTransfer.setData('source', 'assembly-area');
+          event.dataTransfer.setData('index', Array.from(assemblyArea.children).indexOf(tile));
+        } else if (tile.parentNode === tileContainer) {
+          event.dataTransfer.setData('original-index', Array.from(tileContainer.children).indexOf(tile));
+        }
+      });
+
+      return tile;
+    }
+
+    function createPlaceholder() {
+      const placeholder = document.createElement('div');
+      placeholder.classList.add('placeholder');
+      placeholder.addEventListener('dragover', (event) => {
+        event.preventDefault();
+      });
+      placeholder.addEventListener('drop', (event) => {
+        const value = parseFloat(event.dataTransfer.getData('text/plain'));
+        const color = event.dataTransfer.getData('color');
+        const name = event.dataTransfer.getData('name');
+        const source = event.dataTransfer.getData('source');
+
+        if (source === 'tile-container') {
+          const originalIndex = parseInt(event.dataTransfer.getData('original-index'));
+          const draggedTile = tileContainer.children[originalIndex];
+          const clonedTile = draggedTile.cloneNode(true);
+
+          const clonedCheckbox = clonedTile.querySelector('input[type="checkbox"]');
+          if (clonedCheckbox) {
+            clonedCheckbox.addEventListener('change', () => {
+              clonedTile.dataset.dotted = clonedCheckbox.checked;
+              updateTileWidth(clonedTile); // Call function for cloned tile
+              updateOutput();
+            });
+          }
+
+          clonedTile.draggable = true;
+          clonedTile.addEventListener('dragstart', (event) => {
+            event.dataTransfer.setData('text/plain', clonedTile.dataset.value);
+            event.dataTransfer.setData('color', clonedTile.style.backgroundColor);
+            event.dataTransfer.setData('name', clonedTile.dataset.name);
+            event.dataTransfer.setData('source', 'assembly-area');
+            event.dataTransfer.setData('index', Array.from(assemblyArea.children).indexOf(clonedTile));
+          });
+
+          placeholder.replaceWith(clonedTile);
+          assembledTiles.push(clonedTile);
+          initialPlaceholder = createPlaceholder();
+          assemblyArea.appendChild(initialPlaceholder);
+        } else if (source === 'assembly-area') {
+          const index = parseInt(event.dataTransfer.getData('index'));
+          const draggedElement = assemblyArea.children[index];
+          placeholder.replaceWith(draggedElement);
+          assembledTiles.splice(assembledTiles.indexOf(draggedElement), 1);
+          assembledTiles.splice(Array.from(assemblyArea.children).indexOf(draggedElement), 0, draggedElement);
+          initialPlaceholder = createPlaceholder();
+          assemblyArea.appendChild(initialPlaceholder);
+        }
+        updateOutput();
+      });
+      return placeholder;
+    }
+
+    function updateTileWidth(tile) {
+      const baseValue = parseFloat(tile.dataset.value);
+      const isDotted = tile.dataset.dotted === 'true';
+      const visualWidth = isDotted ? baseValue * 1.5 * tilewidth : baseValue * tilewidth;
+      tile.style.width = `${visualWidth}px`;
+    }
+
+    function updateOutput() {
+      assembledLength = Array.from(assemblyArea.children)
+        .filter(child => child.classList.contains('tile'))
+        .reduce((sum, tile) => {
+          const baseValue = parseFloat(tile.dataset.value);
+          const isDotted = tile.dataset.dotted === 'true';
+          return sum + (isDotted ? baseValue * 1.5 : baseValue);
+        }, 0);
+      output.textContent = `${assembledLength}/${1}`;
+      if (assembledLength > 1) {
+        output.style.color = 'red';
+      } else {
+        output.style.color = 'black';
+      }
+    }
+
+    // Initial tile generation
+    noteValues.forEach(note => {
+      const tile = createTile(note);
+      tileContainer.appendChild(tile);
+    });
+
+    // Initial placeholder
+    assemblyArea.appendChild(initialPlaceholder);
+
+    assemblyArea.addEventListener('dragover', (event) => {
+      event.preventDefault();
+    });
+
+    assemblyArea.addEventListener('drop', (event) => {
+      const value = parseFloat(event.dataTransfer.getData('text/plain'));
+      const color = event.dataTransfer.getData('color');
+      const name = event.dataTransfer.getData('name');
+      const source = event.dataTransfer.getData('source');
+      const dropTarget = event.target;
+
+      if (source === 'tile-container' && dropTarget === assemblyArea) {
+        const originalIndex = parseInt(event.dataTransfer.getData('original-index'));
+        const draggedTile = tileContainer.children[originalIndex];
+        const clonedTile = draggedTile.cloneNode(true);
+
+        const clonedCheckbox = clonedTile.querySelector('input[type="checkbox"]');
+        if (clonedCheckbox) {
+          clonedCheckbox.addEventListener('change', () => {
+            clonedTile.dataset.dotted = clonedCheckbox.checked;
+            updateTileWidth(clonedTile); // Call function for cloned tile
+            updateOutput();
+          });
+        }
+
+        clonedTile.draggable = true;
+        clonedTile.addEventListener('dragstart', (event) => {
+          event.dataTransfer.setData('text/plain', clonedTile.dataset.value);
+          event.dataTransfer.setData('color', clonedTile.style.backgroundColor);
+          event.dataTransfer.setData('name', clonedTile.dataset.name);
+          event.dataTransfer.setData('source', 'assembly-area');
+          event.dataTransfer.setData('index', Array.from(assemblyArea.children).indexOf(clonedTile));
+        });
+        assemblyArea.appendChild(clonedTile);
+        assembledTiles.push(clonedTile);
+        initialPlaceholder.remove();
+        initialPlaceholder = createPlaceholder();
+        assemblyArea.appendChild(initialPlaceholder);
+      } else if (source === 'assembly-area' && dropTarget.classList.contains('placeholder')) {
+        const index = parseInt(event.dataTransfer.getData('index'));
+        const draggedElement = assemblyArea.children[index];
+        dropTarget.replaceWith(draggedElement);
+        assembledTiles.splice(assembledTiles.indexOf(draggedElement), 1);
+        assembledTiles.splice(Array.from(assemblyArea.children).indexOf(draggedElement), 0, draggedElement);
+        initialPlaceholder = createPlaceholder();
+        assemblyArea.appendChild(initialPlaceholder);
+      } else if (source === 'assembly-area' && dropTarget !== assemblyArea && dropTarget.classList.contains('tile')) {
+        const index = parseInt(event.dataTransfer.getData('index'));
+        const draggedElement = assemblyArea.children[index];
+        const targetIndex = Array.from(assemblyArea.children).indexOf(dropTarget);
+        assemblyArea.insertBefore(draggedElement, targetIndex > index ? dropTarget.nextSibling : dropTarget);
+        const movedTile = assembledTiles.splice(assembledTiles.indexOf(draggedElement), 1)[0];
+        assembledTiles.splice(Array.from(assemblyArea.children).indexOf(draggedElement), 0, movedTile);
+      }
+      updateOutput();
+    });
+
+    // Allow dropping back into the tile container to remove
+    tileContainer.addEventListener('dragover', (event) => {
+      event.preventDefault();
+    });
+
+    tileContainer.addEventListener('drop', (event) => {
+      const source = event.dataTransfer.getData('source');
+      if (source === 'assembly-area') {
+        const indexToRemove = parseInt(event.dataTransfer.getData('index'));
+        const tileToRemove = assemblyArea.children[indexToRemove];
+        assemblyArea.removeChild(tileToRemove);
+        assembledTiles.splice(assembledTiles.indexOf(tileToRemove), 1);
+        updateOutput();
+      }
+    });
+  </script>
+
+</body>
+</html>
